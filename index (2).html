@@ -1,0 +1,238 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ziele-Tracker</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .input-group {
+      margin-bottom: 20px;
+    }
+    input[type="text"] {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-right: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      color: white;
+    }
+    .btn-blue {
+      background-color: #007bff;
+    }
+    .btn-blue:hover {
+      background-color: #0056b3;
+    }
+    .btn-red {
+      background-color: #dc3545;
+    }
+    .btn-red:hover {
+      background-color: #a71d2a;
+    }
+    .btn-green {
+      background-color: #28a745;
+    }
+    .btn-green:hover {
+      background-color: #1e7e34;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #e9ecef;
+    }
+    .goal-buttons {
+      margin-top: 20px;
+    }
+    .error {
+      color: red;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .loading {
+      text-align: center;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div class="container">
+      <h1>Ziele-Tracker</h1>
+      <p class="loading">Lade Anwendung...</p>
+      <p class="error">Falls diese Nachricht länger als ein paar Sekunden sichtbar ist, überprüfe bitte die Browser-Konsole (F12 → Console) auf Fehler oder deaktiviere Brave Shields für diese Seite.</p>
+    </div>
+  </div>
+  <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.22.9/babel.min.js"></script>
+  <script type="text/babel">
+    function App() {
+      const [groupMembers, setGroupMembers] = React.useState([]);
+      const [newMember, setNewMember] = React.useState('');
+      const [goals, setGoals] = React.useState({});
+      const [week, setWeek] = React.useState(1);
+
+      const getCurrentDate = () => {
+        const today = new Date();
+        return today.toLocaleDateString('de-DE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      };
+
+      const addMember = () => {
+        if (newMember.trim() && !groupMembers.includes(newMember)) {
+          setGroupMembers([...groupMembers, newMember]);
+          setGoals({ ...goals, [newMember]: [] });
+          setNewMember('');
+        }
+      };
+
+      const addGoal = (member) => {
+        const newGoal = prompt('Neues Ziel für ' + member + ':');
+        if (newGoal) {
+          setGoals({
+            ...goals,
+            [member]: [...(goals[member] || []), { text: newGoal, week: week }],
+          });
+        }
+      };
+
+      const resetWeek = () => {
+        setWeek(week + 1);
+        setGoals(
+          Object.keys(goals).reduce((acc, member) => {
+            acc[member] = goals[member].map(goal => ({ ...goal, week: week + 1 }));
+            return acc;
+          }, {})
+        );
+      };
+
+      return (
+        <div className="container">
+          <h1>Ziele-Tracker</h1>
+          <div className="input-group">
+            <input
+              type="text"
+              value={newMember}
+              onChange={(e) => setNewMember(e.target.value)}
+              placeholder="Neues Mitglied"
+            />
+            <button className="btn-blue" onClick={addMember}>
+              Mitglied hinzufügen
+            </button>
+            <button className="btn-red" onClick={resetWeek}>
+              Woche zurücksetzen
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Ziel-Nr.</th>
+                {groupMembers.map((member, index) => (
+                  <th key={index}>{member}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...Array(Math.max(...Object.values(goals).map(g => g.length), 1))].map((_, rowIndex) => (
+                <tr key={rowIndex}>
+                  <td>{rowIndex === 0 ? getCurrentDate() : ''}</td>
+                  <td>{rowIndex + 1}</td>
+                  {groupMembers.map((member, colIndex) => (
+                    <td key={colIndex}>
+                      {goals[member] && goals[member][rowIndex] ? goals[member][rowIndex].text : ''}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="goal-buttons">
+            {groupMembers.map((member, index) => (
+              <button
+                key={index}
+                className="btn-green"
+                onClick={() => addGoal(member)}
+              >
+                Ziel für {member} hinzufügen
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    try {
+      ReactDOM.render(<App />, document.getElementById('root'));
+    } catch (e) {
+      console.error('Fehler beim Rendern der Anwendung:', e);
+      document.getElementById('root').innerHTML = '<div class="container"><p class="error">Fehler beim Laden der Anwendung. Bitte überprüfe die Browser-Konsole (F12) für Details.</p></div>';
+    }
+  </script>
+</body>
+</html>
